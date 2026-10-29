@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Chaîne 2026 | Özel Yönetim Paneli</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0e0c0f;color:#eee9e1;font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1120px;margin:auto;padding:32px 20px 80px}header{display:flex;justify-content:space-between;gap:18px;align-items:start;flex-wrap:wrap;margin-bottom:28px}
+h1{font-family:Georgia,serif;font-weight:400;font-size:clamp(26px,4vw,42px);margin:6px 0}h2{font-size:18px;font-weight:550}
+small,.muted{color:#bcb4ae}.eyebrow{text-transform:uppercase;letter-spacing:.22em;color:#c7a878;font-size:11px}
+section,.metric{background:#1a171a;border:1px solid #3c3031;border-radius:12px;padding:18px;margin-bottom:16px}
+label{display:block;margin:12px 0 5px}input{width:100%;border:1px solid #64565b;border-radius:7px;background:#110e12;color:#fff;padding:12px;font:inherit}
+button{border:1px solid #a68b67;border-radius:8px;background:#a68b67;color:#171014;font:inherit;font-weight:650;padding:10px 16px;cursor:pointer}button.secondary{background:transparent;color:#eee3d5}button:disabled{opacity:.6;cursor:wait}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.metric{margin:0}.metric strong{display:block;font-size:30px;font-variant-numeric:tabular-nums}table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:13px}th,td{text-align:left;padding:9px 12px;border-bottom:1px solid #463a3e}th{color:#dcc39c}.scroll{overflow-x:auto}.error{color:#ff9c9c}.success{color:#a0dfba}.hidden{display:none!important}pre{white-space:pre-wrap}textarea{font:inherit}
+@media(max-width:600px){main{padding:16px 12px 50px}section{padding:13px}}
+</style></head><body><main>
+<header><div><div class="eyebrow">Chaîne des Rôtisseurs · 2026</div><h1>Yönetim ve Canlı Sonuçlar</h1><div class="muted">Özel erişim · Anonim değerlendirmeler</div></div><button class="secondary hidden" id="logout">Çıkış yap</button></header>
+<section id="login"><h2>Yönetici girişi</h2><p class="muted">Yalnızca yetkilendirilmiş Supabase hesabıyla giriş yapılabilir.</p><form id="loginForm"><label for="email">E-posta</label><input id="email" type="email" autocomplete="username" required><label for="password">Şifre</label><input id="password" type="password" autocomplete="current-password" required><p><button type="submit" id="loginBtn">Giriş yap</button></p></form></section>
+<div id="dashboard" class="hidden">
+<div class="row"><p class="muted" id="lastUpdated">Veriler yükleniyor…</p><div class="row"><button class="secondary" id="refresh">Yenile</button><button id="csv">CSV indir</button></div></div>
+<div class="metrics" id="metrics"></div>
+<section><h2>Yemek değerlendirmeleri</h2><div class="scroll"><table><thead><tr><th>Yemek</th><th>Oy sayısı</th><th>Ortalama / 5</th></tr></thead><tbody id="foods"></tbody></table></div></section>
+<section><h2>Şarap değerlendirmeleri</h2><div class="scroll"><table><thead><tr><th>Şarap</th><th>Oy sayısı</th><th>Ort. / 100</th><th>Görünüm / 15</th><th>Koku / 25</th><th>Damak / 25</th><th>Bitiş / 15</th><th>Genel / 20</th></tr></thead><tbody id="wines"></tbody></table></div></section>
+<section><h2>Yazılı tadım notları</h2><div class="scroll"><table><thead><tr><th>Gönderim</th><th>Tür</th><th>Ürün</th><th>Not</th></tr></thead><tbody id="notes"></tbody></table></div></section>
+<section><h2>Tüm değerlendirmeler</h2><div class="scroll"><table><thead><tr><th>Anonim kullanıcı</th><th>Tür</th><th>Ürün</th><th>Puan</th><th>Güncelleme</th></tr></thead><tbody id="all"></tbody></table></div></section>
+</div><p role="status" aria-live="polite" id="message" class="muted"></p>
+</main>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="./chaine-admin.js"></script>
+</body></html>
