@@ -8,6 +8,8 @@
   const URL = 'https://fxwvgbkohymkqppknoxb.supabase.co';
   const KEY = 'sb_publishable_CLCU0bQKGrqLyy4LiReHEw_gBLrK9jU';
   const STORAGE = 'chaine_2026_submission_receipt_v2';
+  const DRAFT_KEY = 'chaine_2026_notes_v5';
+  const MAX_TOTAL_NOTE_CHARS = 50000; // Total across all 10 food and 5 wine notes.
   const buttons = [...document.querySelectorAll('[data-chaine-submit]')];
   const status = document.getElementById('chaine-submit-status');
   const eveningStatus = document.getElementById('chaine-evening-submit-status');
@@ -15,6 +17,40 @@
   if (!buttons.length || !status) return;
 
   let pending = false, client, toastTimer;
+  // A stale tab must never overwrite another tab's local draft or submit its old snapshot.
+  const readDraft = () => {try{return localStorage.getItem(DRAFT_KEY);}catch{return null;}};
+  let lastOwnDraft = readDraft(), staleTab = false;
+  const staleMessage = 'Bu menü başka bir sekmede değiştirildi. Önce bu sekmeyi yenileyin; eski sekmeden gönderim yapmayın.';
+  const notesIndicator = document.createElement('p');
+  notesIndicator.id = 'chaine-note-capacity';
+  notesIndicator.setAttribute('role','status');
+  notesIndicator.style.cssText = 'font-size:12px;line-height:1.5;margin:8px 0;color:inherit;';
+  status.insertAdjacentElement('afterend',notesIndicator);
+  const charCount = value => Array.from(String(value ?? '')).length;
+  function totalNoteChars() {
+    const state = journal();
+    return ['food','wine'].reduce((sum,kind) => sum +
+      Object.values(state[kind]).reduce((n,entry) => n + charCount(entry?.note),0),0);
+  }
+  function refreshNoteIndicator() {
+    try {
+      const used = totalNoteChars();
+      notesIndicator.textContent = `Tadım notları: ${used.toLocaleString('tr-TR')} / ${MAX_TOTAL_NOTE_CHARS.toLocaleString('tr-TR')} karakter (toplam).`;
+      notesIndicator.style.color = used > MAX_TOTAL_NOTE_CHARS ? '#b91c1c' : 'inherit';
+      return used;
+    } catch { notesIndicator.textContent = ''; return 0; }
+  }
+  function ensureFreshTab() {
+    if (staleTab || readDraft() !== lastOwnDraft) {
+      staleTab = true;
+      throw new Error(staleMessage);
+    }
+  }
+  function blockStaleTab() {
+    staleTab = true;
+    for (const b of buttons) b.disabled = true;
+    tell(staleMessage,'error',true);
+  }
   function tell(message, state = '', popup = false) {
     status.textContent = message;
     status.dataset.state = state;
@@ -40,7 +76,7 @@
   };
   const note = (n) => {
     const value = String(n == null ? '' : n);
-    if (value.length > 2000) throw new Error('Bir tadım notu 2000 karakterden uzun olamaz.');
+    if (charCount(value) > MAX_TOTAL_NOTE_CHARS) throw new Error('Tek bir not 50.000 karakteri aşamaz.');
     return value;
   };
   const isActive = r => Boolean(r.note.trim() || (r.kind === 'food'
@@ -66,6 +102,9 @@
         overall:integer(e['genel'],20),note:note(e.note)};
       if (isActive(r)) rows.push(r);
     }
+    if (totalNoteChars() > MAX_TOTAL_NOTE_CHARS) {
+      throw new Error('Toplam tadım notu sınırı 50.000 karakter. Notlarınızı kısaltın; puanlarınız korunur.');
+    }
     return rows;
   }
   const fingerprint = () => JSON.stringify(buildRows('local').map(({user_id,...rest})=>rest));
@@ -84,7 +123,9 @@
   }
   function markChanged() {
     if (pending) return;
+    refreshNoteIndicator();
     try {
+      ensureFreshTab();
       const rows = buildRows('local');
       const previous = receipt();
       const dirty = !previous || previous.fingerprint !== fingerprint();
@@ -101,7 +142,7 @@
         tell(`${rows.length} değerlendirme paylaşılmaya hazır.`,'pending');
       }
     } catch(e) {
-      for(const b of buttons) b.disabled = false;
+      for(const b of buttons) b.disabled = true;
       tell(e.message || 'Değerlendirmeler kontrol edilemiyor.','error');
     }
   }
@@ -137,23 +178,31 @@
     for (const b of buttons) b.disabled = true;
     tell('Değerlendirmeleriniz paylaşılıyor…','pending',true);
     try {
+      ensureFreshTab();
+      // Validate the entire guest draft before any authentication or database write.
+      const prepared = buildRows('local');
       const api = getClient();
       const userId = await ensureGuest(api);
-      const rows = buildRows(userId);
-      const snapshot = fingerprint();
+      ensureFreshTab();
+      const rows = prepared.map(r => ({...r,user_id:userId}));
+      const snapshot = JSON.stringify(prepared.map(({user_id,...rest}) => rest));
       const prev = receipt();
       if (!rows.length && !prev?.hadRows) throw new Error('Göndermek için en az bir değerlendirme veya not ekleyin.');
       // Current server state is needed to remove scores cleared since an earlier submission.
+      ensureFreshTab();
       const found = await api.from('chaine_votes').select('kind,item_id').eq('user_id',userId);
       if (found.error) throw found.error;
       const activeKeys = new Set(rows.map(r => `${r.kind}:${r.item_id}`));
       const stale = (found.data || []).filter(r => !activeKeys.has(`${r.kind}:${r.item_id}`));
+      // A second tab may have edited the draft while the server query was in flight.
+      ensureFreshTab();
       // First save active evaluations; never delete old values before new values succeed.
       if (rows.length) {
         const written = await api.from('chaine_votes').upsert(rows,{onConflict:'user_id,kind,item_id'});
         if (written.error) throw written.error;
       }
       for (const kind of ['food','wine']) {
+        ensureFreshTab();
         const ids = stale.filter(r => r.kind === kind).map(r=>r.item_id);
         if (!ids.length) continue;
         const deleted = await api.from('chaine_votes').delete()
@@ -179,20 +228,39 @@
       let maySend = true;
       try {maySend = buildRows('local').length > 0 || Boolean(receipt()?.hadRows);} catch {}
       for (const b of buttons) b.disabled = !maySend;
+      if (staleTab || totalNoteChars() > MAX_TOTAL_NOTE_CHARS) markChanged();
     }
   }
   for (const b of buttons) b.addEventListener('click',submit);
+  const isJournalInput = target => Boolean(target?.matches?.('[data-sync],[data-note-field],[data-slider],[data-star],.score-buttons button') ||
+    target?.closest?.('[data-star],.journal-card .score-buttons button'));
+  // Capture-phase protection runs before the old HTML's input/star handlers can persist a stale copy.
+  for (const kind of ['input','click']) {
+    document.addEventListener(kind,e=>{
+      if (!isJournalInput(e.target)) return;
+      if (staleTab || readDraft() !== lastOwnDraft) {
+        if (e.cancelable) e.preventDefault();
+        e.stopImmediatePropagation();
+        blockStaleTab();
+      }
+    },true);
+  }
+  // The original HTML writes its local draft on the target itself; update our revision only afterwards.
   document.addEventListener('input',e=>{
-    if(e.target.matches('[data-sync],[data-note-field],[data-slider]')) queueMicrotask(markChanged);
+    if (!isJournalInput(e.target)) return;
+    lastOwnDraft = readDraft();
+    queueMicrotask(markChanged);
   });
   document.addEventListener('click',e=>{
-    if(e.target.closest('[data-star],.journal-card .score-buttons button')) queueMicrotask(markChanged);
+    if (!isJournalInput(e.target)) return;
+    lastOwnDraft = readDraft();
+    queueMicrotask(markChanged);
   });
   window.addEventListener('storage',e=>{
-    if(e.key==='chaine_2026_notes_v5') markChanged();
+    if (e.key === DRAFT_KEY && e.newValue !== lastOwnDraft) blockStaleTab();
   });
   window.addEventListener('online',()=>{
-    if(!pending) tell('Bağlantı yeniden kuruldu. Değerlendirmelerinizi paylaşabilirsiniz.','pending');
+    if (!pending) markChanged();
   });
   markChanged();
 })();
